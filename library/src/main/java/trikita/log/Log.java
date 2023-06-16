@@ -70,8 +70,8 @@ public final class Log {
 		}
 	}
 
-	public final static SystemOutPrinter SYSTEM = new SystemOutPrinter();
-	public final static AndroidPrinter ANDROID = new AndroidPrinter();
+// 	public final static SystemOutPrinter SYSTEM = new SystemOutPrinter();
+// 	public final static AndroidPrinter ANDROID = new AndroidPrinter();
 
 	private final static Map<String, String> mTags = new HashMap<>();
 
@@ -79,14 +79,15 @@ public final class Log {
 	private static boolean mUseFormat = false;
 	private static int mMinLevel = V;
 
-	private static Set<Printer> mPrinters = new HashSet<>();
+// 	private static Set<Printer> mPrinters = new HashSet<>();
+	private static Printer PRINTER = new SystemOutPrinter();
 
 	static {
-		if (ANDROID.mLoaded) {
-			usePrinter(ANDROID, true);
-		} else {
-			usePrinter(SYSTEM, true);
-		}
+// 		if (ANDROID.mLoaded) {
+// 			usePrinter(ANDROID, true);
+// 		} else {
+// 			usePrinter(SYSTEM, true);
+// 		}
 	}
 
 	public static synchronized Log useTags(String[] tags) {
@@ -104,14 +105,14 @@ public final class Log {
 		return null;
 	}
 
-	public static synchronized Log usePrinter(Printer p, boolean on) {
-		if (on) {
-			mPrinters.add(p);
-		} else {
-			mPrinters.remove(p);
-		}
-		return null;
-	}
+// 	public static synchronized Log usePrinter(Printer p, boolean on) {
+// 		if (on) {
+// 			mPrinters.add(p);
+// 		} else {
+// 			mPrinters.remove(p);
+// 		}
+// 		return null;
+// 	}
 
 	public static synchronized Log v(Object msg, Object... args) {
 		log(V, mUseFormat, msg, args);
@@ -136,6 +137,7 @@ public final class Log {
 
 	private static void log(int level, boolean fmt, Object msg, Object... args) {
 		if (level < mMinLevel) {
+			// Message filtered 
 			return;
 		}
 		String tag = tag();
@@ -153,9 +155,9 @@ public final class Log {
 	private static String format(boolean fmt, Object msg, Object... args) {
 		Throwable t = null;
 		if (args == null) {
-			// Null array is not supposed to be passed into this method, so it must
-			// be a single null argument
-			args = new Object[]{null};
+			// Null array is not supposed to be passed into this method
+			// so it must be a single null argument
+			args = new Object[] { null };
 		}
 		if (args.length > 0 && args[args.length - 1] instanceof Throwable) {
 			t = (Throwable) args[args.length - 1];
@@ -170,11 +172,11 @@ public final class Log {
 		StringBuilder sb = new StringBuilder();
 		sb.append(msg == null ? "null" : msg.toString());
 		for (Object arg : args) {
-			sb.append("\t");
+			sb.append(TAB_INDENT);
 			sb.append(arg == null ? "null" : arg.toString());
 		}
 		if (t != null) {
-			sb.append("\n");
+			sb.append(NEW_LINE);
 			StringWriter sw = new StringWriter();
 			PrintWriter pw = new PrintWriter(sw);
 			t.printStackTrace(pw);
@@ -183,6 +185,8 @@ public final class Log {
 		return sb.toString();
 	}
 
+	final static String TAB_INDENT = "\t";
+	final static String NEW_LINE = "\n";
 	final static int MAX_LOG_LINE_LENGTH = 4000;
 
 	private static void print(int level, String tag, String msg) {
@@ -199,46 +203,48 @@ public final class Log {
 				String part = line.substring(0, splitPos);
 				line = line.substring(splitPos);
 
-				for (Printer p : mPrinters) {
-					p.print(level, tag, part);
-				}
+// 				for (Printer p : mPrinters) {
+// 					p.print(level, tag, part);
+// 				}
+				PRINTER.print(level, tag, part);
 			} while (line.length() > 0);
 		}
 	}
 
 	private final static Pattern ANONYMOUS_CLASS = Pattern.compile("\\$\\d+$");
 	private final static int STACK_DEPTH = 4;
+	
 	private static String tag() {
+		
+		// === TODO replace from here
 		StackTraceElement[] stackTrace = new Throwable().getStackTrace();
 		if (stackTrace.length < STACK_DEPTH) {
-			throw new IllegalStateException
-				("Synthetic stacktrace didn't have enough elements: are you using proguard?");
+			throw new IllegalStateException("Synthetic stacktrace didn't have enough elements: are you using proguard?");
 		}
 		String className = stackTrace[STACK_DEPTH-1].getClassName();
+		// === to here
+		
 		String tag = mTags.get(className);
 		if (tag != null) {
 			return tag;
 		}
-
 		try {
 			Class<?> c = Class.forName(className);
 			for (String f : mUseTags) {
 				try {
 					Field field = c.getDeclaredField(f);
-					if (field != null) {
-						field.setAccessible(true);
-						Object value = field.get(null);
-						if (value instanceof String) {
-							mTags.put(className, (String) value);
-							return (String) value;
-						}
+					if (field == null) {
+						continue;
 					}
-				} catch (NoSuchFieldException|IllegalAccessException|
-						IllegalStateException|NullPointerException e) {
-					 //Ignore 
-				}
+					field.setAccessible(true);
+					Object value = field.get(null);
+					if (value instanceof String str) {
+						mTags.put(className, str);
+						return str;
+					}
+				} catch (NoSuchFieldException | IllegalAccessException | IllegalStateException | NullPointerException ignore) { }
 			}
-		} catch (ClassNotFoundException e) { /* Ignore */ }
+		} catch (ClassNotFoundException ignore) { }
 
 		// Check class field useTag, if exists - return it, otherwise - return the generated tag
 		Matcher m = ANONYMOUS_CLASS.matcher(className);
