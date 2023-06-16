@@ -15,61 +15,71 @@ import java.util.Set;
 
 public final class Log {
 
+	final static String TAB_INDENT = "\t";
+	final static String NEW_LINE = "\n";
+	final static int MAX_LOG_LINE_LENGTH = 4000;
+
+	private final static Pattern ANONYMOUS_CLASS = Pattern.compile("\\$\\d+$");
+	private final static int STACK_DEPTH = 4;
+	
 	public final static int V = 0;
 	public final static int D = 1;
 	public final static int I = 2;
 	public final static int W = 3;
 	public final static int E = 4;
+	private final static String[] LEVELS = new String[] { "V", "D", "I", "W", "E" };
 
-	private Log() {}
-
-	public interface Printer {
-		public void print(int level, String tag, String msg);
+	private Log() {
+		// ...
 	}
 
-	private static class SystemOutPrinter implements Printer {
-		private final static String[] LEVELS = new String[]{"V", "D", "I", "W", "E"};
-		public void print(int level, String tag, String msg) {
-			System.out.println(LEVELS[level] + "/" + tag + ": " + msg);
-		}
-	}
+// 	public interface Printer {
+// 		public void print(int level, String tag, String msg);
+// 	}
+// 
+// 	private static class SystemOutPrinter implements Printer {
+// 		private final static String[] LEVELS = new String[]{"V", "D", "I", "W", "E"};
+// 		public void print(int level, String tag, String msg) {
+// 			System.out.println(LEVELS[level] + "/" + tag + ": " + msg);
+// 		}
+// 	}
 
-	private static class AndroidPrinter implements Printer {
+// 	private static class AndroidPrinter implements Printer {
 
-		private final static String[] METHOD_NAMES = new String[]{"v", "d", "i", "w", "e"};
+// 		private final static String[] METHOD_NAMES = new String[]{"v", "d", "i", "w", "e"};
 
-		private final Class<?> mLogClass;
-		private final Method[] mLogMethods;
-		private final boolean mLoaded;
+// 		private final Class<?> mLogClass;
+// 		private final Method[] mLogMethods;
+// 		private final boolean mLoaded;
 
-		public AndroidPrinter() {
-			Class logClass = null;
-			boolean loaded = false;
-			mLogMethods = new Method[METHOD_NAMES.length];
-			try {
-				logClass = Class.forName("android.util.Log");
-				for (int i = 0; i < METHOD_NAMES.length; i++) {
-					mLogMethods[i] = logClass.getMethod(METHOD_NAMES[i], String.class, String.class);
-				}
-				loaded = true;
-			} catch (NoSuchMethodException|ClassNotFoundException e) {
-				// Ignore
-			}
-			mLogClass = logClass;
-			mLoaded = loaded;
-		}
-
-		public void print(int level, String tag, String msg) {
-			try {
-				if (mLoaded) {
-					mLogMethods[level].invoke(null, tag, msg);
-				}
-			} catch (InvocationTargetException|IllegalAccessException e) {
-				// Ignore
-			}
-		}
-	}
-
+// 		public AndroidPrinter() {
+// 			Class logClass = null;
+// 			boolean loaded = false;
+// 			mLogMethods = new Method[METHOD_NAMES.length];
+// 			try {
+// 				logClass = Class.forName("android.util.Log");
+// 				for (int i = 0; i < METHOD_NAMES.length; i++) {
+// 					mLogMethods[i] = logClass.getMethod(METHOD_NAMES[i], String.class, String.class);
+// 				}
+// 				loaded = true;
+// 			} catch (NoSuchMethodException|ClassNotFoundException e) {
+// 				// Ignore
+// 			}
+// 			mLogClass = logClass;
+// 			mLoaded = loaded;
+// 		}
+// 
+// 		public void print(int level, String tag, String msg) {
+// 			try {
+// 				if (mLoaded) {
+// 					mLogMethods[level].invoke(null, tag, msg);
+// 				}
+// 			} catch (InvocationTargetException|IllegalAccessException e) {
+// 				// Ignore
+// 			}
+// 		}
+// 	}
+// 
 // 	public final static SystemOutPrinter SYSTEM = new SystemOutPrinter();
 // 	public final static AndroidPrinter ANDROID = new AndroidPrinter();
 
@@ -80,7 +90,6 @@ public final class Log {
 	private static int mMinLevel = V;
 
 // 	private static Set<Printer> mPrinters = new HashSet<>();
-	private static Printer PRINTER = new SystemOutPrinter();
 
 	static {
 // 		if (ANDROID.mLoaded) {
@@ -141,54 +150,53 @@ public final class Log {
 			return;
 		}
 		String tag = tag();
-		if (mUseTags.length > 0 && tag.equals(msg)) {
-			if (args.length > 1) {
-				print(level, tag, format(fmt, args[0], Arrays.copyOfRange(args, 1, args.length)));
-			} else {
-				print(level, tag, format(fmt, (args.length > 0 ? args[0] : "")));
-			}
-		} else {
+		if (mUseTags.length == 0 && !tag.equals(msg)) {
 			print(level, tag, format(fmt, msg, args));
+			return;
 		}
+		if (args.length > 1) {
+			print(level, tag, format(fmt, args[0], Arrays.copyOfRange(args, 1, args.length)));
+			return;
+		}
+		print(level, tag, format(fmt, (args.length > 0 ? args[0] : "")));
 	}
 
 	private static String format(boolean fmt, Object msg, Object... args) {
-		Throwable t = null;
 		if (args == null) {
 			// Null array is not supposed to be passed into this method
 			// so it must be a single null argument
 			args = new Object[] { null };
 		}
+		Throwable t = null;
 		if (args.length > 0 && args[args.length - 1] instanceof Throwable) {
 			t = (Throwable) args[args.length - 1];
 			args = Arrays.copyOfRange(args, 0, args.length - 1);
 		}
-		if (fmt && msg instanceof String) {
-			String head = (String) msg;
-			if (head.indexOf('%') != -1) {
-				return String.format(head, args);
-			}
+		if (fmt && msg instanceof String head && head.indexOf('%') != -1) {
+			return String.format(head, args);
+// 			if (head.indexOf('%') != -1) {
+// 				return String.format(head, args);
+// 			}
 		}
-		StringBuilder sb = new StringBuilder();
-		sb.append(msg == null ? "null" : msg.toString());
+		StringBuilder sb = new StringBuilder(message == null ? "" : msg.toString());
+		//sb.append(msg == null ? "null" : msg.toString());
 		for (Object arg : args) {
-			sb.append(TAB_INDENT);
-			sb.append(arg == null ? "null" : arg.toString());
+// 			sb.append(TAB_INDENT);
+// 			sb.append(arg == null ? "null" : arg.toString());
+			if (arg == null) {
+				continue;
+			}
+			sb.append(TAB_INDENT).append(arg.toString());
 		}
 		if (t != null) {
-			sb.append(NEW_LINE);
 			StringWriter sw = new StringWriter();
 			PrintWriter pw = new PrintWriter(sw);
 			t.printStackTrace(pw);
-			sb.append(sw.toString());
+			sb.append(NEW_LINE).append(sw.toString());
 		}
 		return sb.toString();
 	}
-
-	final static String TAB_INDENT = "\t";
-	final static String NEW_LINE = "\n";
-	final static int MAX_LOG_LINE_LENGTH = 4000;
-
+	
 	private static void print(int level, String tag, String msg) {
 		for (String line : msg.split("\\n")) {
 			do {
@@ -206,13 +214,14 @@ public final class Log {
 // 				for (Printer p : mPrinters) {
 // 					p.print(level, tag, part);
 // 				}
-				PRINTER.print(level, tag, part);
+				print_(level, tag, part);
 			} while (line.length() > 0);
 		}
 	}
 
-	private final static Pattern ANONYMOUS_CLASS = Pattern.compile("\\$\\d+$");
-	private final static int STACK_DEPTH = 4;
+	private static void print_(int level, String tag, String msg) {
+		System.out.println(LEVELS[level] + "/" + tag + ": " + msg);
+	}
 	
 	private static String tag() {
 		
